@@ -1,0 +1,54 @@
+/*
+Overview
+Many of the times it happens that we get a "Data truncation" error in SQL. This error comes 
+when we are crossing the allowed limit for a particular column. For example, the "name" column 
+in my table has datatype varchar(10) and I'm trying to insert any name whose length is more than 
+10 then SQL will give me data truncation error
+
+Scenario
+You are copying data into SQL using copy activty in Azure Data Factory. Your pipeline is running
+daily and it failed one day due to data truncation error on the sink (SQL) side. Imagine you have 
+20 columns in your table. Unfortunately, the error does not show up which column is having truncation 
+issue. In such scenarios, it gets difficult to identify source of error.
+
+Solution
+Following dyanmic SQL script allows us to get maximum length of all the columns from our table so that 
+we can find which column is exceeding allowed limits 
+*/
+
+-- Step 1
+-- In the copy activity in ADF, temporarily change the SQL table in the sink to another table. 
+-- For example, original table was table1 and we changed it to "aanstelling"
+-- Select "Auto create table". This sets all the columns of table to datatype nvarchar(max) 
+-- Now run the pipeline to load data into table1_temp
+
+-- Step 2
+-- Run following script in SQL to dynamically check max length of each column in aanstelling table
+-- This script will not give you direct answer but it will return set of SQL queries in the result
+-- You need to copy the result of below script and run the result queries in another tab
+
+select 'select max(len(' + c.name + ')) as '+ c.name +  ' from stg.aanstelling' 
+from sys.tables t
+join sys.columns c on t.object_id=c.object_id
+join sys.schemas s on s.schema_id= t.schema_id
+where s.name = 'stg'
+and t.name= 'aanstelling'
+
+-- Step 3
+-- Result queries will look like following
+select max(len(_id)) as _id from stg.aanstelling
+select max(len(gebruikersId)) as gebruikersId from stg.aanstelling
+select max(len(begindatum)) as begindatum from stg.aanstelling
+select max(len(workinghours)) as workinghours from stg.aanstelling
+select max(len(TxDate)) as TxDate from stg.aanstelling
+select max(len(TxCreatedUtc)) as TxCreatedUtc from stg.aanstelling
+select max(len(TenantId)) as TenantId from stg.aanstelling
+select max(len(versie_tijdstip)) as versie_tijdstip from stg.aanstelling
+select max(len(versie_nummer)) as versie_nummer from stg.aanstelling
+
+-- Running these queries will give you max length of each column from aanstelling table
+-- You can compare the allowed column limits from the original table with the result of these queries
+-- Quickly you will find which column is crossing the limits and giving an error
+-- Don't forget to drop temporary created aanstelling table once error is found
+
+
