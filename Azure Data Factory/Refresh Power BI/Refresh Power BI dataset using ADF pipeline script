@@ -1,0 +1,163 @@
+{
+    "name": "ppl_refresh_powerbi_dataset",
+    "properties": {
+        "activities": [
+            {
+                "name": "Call Power BI dataset refresh",
+                "type": "WebActivity",
+                "dependsOn": [],
+                "policy": {
+                    "timeout": "0.00:10:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "method": "POST",
+                    "url": {
+                        "value": "@concat('https://api.powerbi.com/v1.0/myorg/groups/',pipeline().parameters.WorkspaceId,'/datasets/',pipeline().parameters.DatasetId,'/refreshes')",
+                        "type": "Expression"
+                    },
+                    "body": {
+                        "value": "@concat('{','}')",
+                        "type": "Expression"
+                    },
+                    "authentication": {
+                        "type": "MSI",
+                        "resource": "https://analysis.windows.net/powerbi/api"
+                    }
+                }
+            },
+            {
+                "name": "Until refresh status is not unknown",
+                "type": "Until",
+                "dependsOn": [
+                    {
+                        "activity": "Wait for dataset refresh",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "userProperties": [],
+                "typeProperties": {
+                    "expression": {
+                        "value": "@not(\n        equals(activity('Get dataset refresh status').output.value[0].status,'Unknown'\n                )\n    ) ",
+                        "type": "Expression"
+                    },
+                    "activities": [
+                        {
+                            "name": "Get dataset refresh status",
+                            "type": "WebActivity",
+                            "dependsOn": [
+                                {
+                                    "activity": "check status every minute",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.00:10:00",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "method": "GET",
+                                "url": {
+                                    "value": "@concat('https://api.powerbi.com/v1.0/myorg/groups/',pipeline().parameters.WorkspaceId,'/datasets/',pipeline().parameters.DatasetId,'/refreshes?$top=1')",
+                                    "type": "Expression"
+                                },
+                                "body": {
+                                    "value": "@concat('{','}')",
+                                    "type": "Expression"
+                                },
+                                "authentication": {
+                                    "type": "MSI",
+                                    "resource": "https://analysis.windows.net/powerbi/api"
+                                }
+                            }
+                        },
+                        {
+                            "name": "check status every 2 minutes",
+                            "type": "Wait",
+                            "dependsOn": [],
+                            "userProperties": [],
+                            "typeProperties": {
+                                "waitTimeInSeconds": 60
+                            }
+                        }
+                    ],
+                    "timeout": "0.00:20:00"
+                }
+            },
+            {
+                "name": "Check if refresh is failed",
+                "type": "IfCondition",
+                "dependsOn": [
+                    {
+                        "activity": "Until refresh status is not unknown",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "userProperties": [],
+                "typeProperties": {
+                    "expression": {
+                        "value": "@equals(activity('Get dataset refresh status').output.value[0].status,\n            'Failed'\n        ) ",
+                        "type": "Expression"
+                    },
+                    "ifTrueActivities": [
+                        {
+                            "name": "Fail1",
+                            "description": "This activity will fail the pipeline if refresh status is failed.",
+                            "type": "Fail",
+                            "dependsOn": [],
+                            "userProperties": [],
+                            "typeProperties": {
+                                "message": "Power BI refresh has failed for EOL",
+                                "errorCode": "101"
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                "name": "Wait for dataset refresh",
+                "type": "Wait",
+                "dependsOn": [
+                    {
+                        "activity": "Call Power BI dataset refresh",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "userProperties": [],
+                "typeProperties": {
+                    "waitTimeInSeconds": 180
+                }
+            }
+        ],
+        "parameters": {
+            "WorkspaceId": {
+                "type": "string"
+            },
+            "DatasetId": {
+                "type": "string"
+            }
+        },
+        "folder": {
+            "name": "EOL"
+        },
+        "annotations": [],
+        "lastPublishTime": "2024-11-28T04:46:50Z"
+    },
+    "type": "Microsoft.DataFactory/factories/pipelines"
+}
